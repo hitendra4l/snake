@@ -1,71 +1,94 @@
 use std::{
-    io::{Error, Stdout, Write, stdout},
-    process::exit,
+    io::{Error, Write, stdout},
+    process,
     time::Duration,
 };
 
 use crossterm::{
     QueueableCommand,
-    cursor::{self, MoveTo},
+    cursor::{Hide, MoveTo, Show},
     event::{self, Event, KeyCode},
-    style::Print,
     terminal::{self, Clear, ClearType},
 };
 
-fn main() {
-    terminal::enable_raw_mode().expect("Couldn't enable raw mode for terminal.");
+struct TerminalGuard;
 
-    let (cols, rows) = terminal::size().expect("Error getting size of terminal.");
-    let mut stdout = stdout();
+impl TerminalGuard {
+    fn new() -> Self {
+        terminal::enable_raw_mode().unwrap();
+        let mut stdout = stdout();
+        stdout.queue(Hide).unwrap();
+        stdout.flush().unwrap();
+        TerminalGuard
+    }
+}
 
-    let _ = stdout.queue(Clear(ClearType::All));
+impl Drop for TerminalGuard {
+    fn drop(&mut self) {
+        let mut stdout = stdout();
+        let _ = terminal::disable_raw_mode();
+        let _ = stdout
+            .queue(Clear(ClearType::All))
+            .and_then(|s| s.queue(Show))
+            .and_then(|s| s.queue(crossterm::cursor::MoveTo(0, 0)))
+            .and_then(|s| s.flush());
+    }
+}
 
-    draw_border(&mut stdout, 0, 0, cols, rows).expect("Error drawing border.");
+fn main() -> Result<(), Error> {
+    let _guard = TerminalGuard::new();
 
-    stdout.flush().expect("Error drawing to terminal.");
+    let (cols, rows) = terminal::size()?;
+    let mut game_state = snake::initialize_game(cols, rows)?;
 
     loop {
-        if event::poll(Duration::from_millis(300)).unwrap() {
-            match event::read().unwrap() {
+        if event::poll(Duration::from_millis(150))? {
+            match event::read()? {
                 Event::Key(event) => {
+                    match event.code {
+                        KeyCode::Char('a') | KeyCode::Char('h') | KeyCode::Left => {
+                            game_state.change_direction(snake::Direction::Left)
+                        }
+
+                        KeyCode::Char('d') | KeyCode::Char('l') | KeyCode::Right => {
+                            game_state.change_direction(snake::Direction::Right)
+                        }
+
+                        KeyCode::Char('w') | KeyCode::Char('k') | KeyCode::Up => {
+                            game_state.change_direction(snake::Direction::Up)
+                        }
+
+                        KeyCode::Char('s') | KeyCode::Char('j') | KeyCode::Down => {
+                            game_state.change_direction(snake::Direction::Down)
+                        }
+                        _ => {}
+                    }
                     if event.code == KeyCode::Char('q') {
-                        let _ = exit_program(&mut stdout);
+                        break;
                     }
                 }
                 Event::Resize(x, y) => println!("{x}, {y}"),
                 _ => {}
             }
         }
+
+        let should_quit = game_state.move_snake();
+        if should_quit {
+            let _ = exit_program();
+        }
     }
+    exit_program()
 }
 
-fn draw_border(stdout: &mut Stdout, x: u16, y: u16, width: u16, height: u16) -> Result<(), Error> {
-    let horizontal = "█".repeat(width as usize);
+fn exit_program() -> Result<(), Error> {
+    terminal::disable_raw_mode()?;
+    let mut stdout = stdout();
 
     stdout
-        .queue(cursor::MoveTo(x, y))?
-        .queue(Print(&horizontal))?;
+        .queue(Clear(ClearType::All))?
+        .queue(MoveTo(0, 0))?
+        .queue(Show)?;
 
-    stdout
-        .queue(cursor::MoveTo(x, y + height - 1))?
-        .queue(Print(&horizontal))?;
-
-    for row in 1..height - 1 {
-        stdout
-            .queue(cursor::MoveTo(x, y + row))?
-            .queue(Print("██"))?;
-
-        stdout
-            .queue(cursor::MoveTo(x + width - 2, y + row))?
-            .queue(Print("██"))?;
-    }
-
-    Ok(())
-}
-
-fn exit_program(stdout: &mut Stdout) -> Result<(), Error> {
-    stdout.queue(Clear(ClearType::All))?.queue(MoveTo(0, 0))?;
-    stdout.flush().unwrap();
-    terminal::disable_raw_mode().unwrap();
-    exit(0);
+    stdout.flush()?;
+    process::exit(0);
 }
