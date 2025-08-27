@@ -5,6 +5,7 @@ A classic snake game implemented in Rust using the `crossterm` library for termi
 ## Gameplay
 
 You control a snake that moves around the screen, eating food to grow longer. The game ends if the snake collides with the walls or with its own body.
+![Gameplay Gif](./assets/gameplay.gif)
 
 ## How to Run
 
