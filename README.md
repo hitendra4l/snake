@@ -12,8 +12,8 @@ You control a snake that moves around the screen, eating food to grow longer. Th
 1.  **Clone the repository:**
 
     ```bash
-    git clone <repository-url>
-    cd snake-game-rust
+    git clone https://github.com/hitendra4l/snake
+    cd snake
     ```
 
 2.  **Run the game:**
